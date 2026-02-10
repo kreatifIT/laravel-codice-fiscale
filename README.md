@@ -44,12 +44,9 @@ php artisan migrate
 ### 3. Sync Data
 
 ```bash
-# Sync Italian municipalities from ANPR
-php artisan codice-fiscale:sync-municipalities
-
-# Sync foreign states from ANPR
-php artisan codice-fiscale:sync-foreign-states
+php artisan codice-fiscale:sync-geo-locations
 ```
+__You might need to configure the `data_sources.csv.*.source` to this `__DIR__ . '/../vendor/kreatif/laravel-codice-fiscale/resources/data/csv/COL_VW_COMUNI_NAZIONI_ESTERE.csv'`.__
 
 ### 4. (Optional) Publish German Translation Data
 
@@ -170,33 +167,11 @@ $foreignStates = GeoLocation::foreignStates()->get();
 ### Sync Municipalities
 
 ```bash
-# Sync from ANPR and update German translations
-php artisan codice-fiscale:sync-municipalities
+# Sync only Countries
+php artisan codice-fiscale:sync-geo-locations --type=stato 
 
-# Skip ANPR sync
-php artisan codice-fiscale:sync-municipalities --no-anpr
-
-# Skip German translations
-php artisan codice-fiscale:sync-municipalities --no-german
-
-# Don't truncate existing data
-php artisan codice-fiscale:sync-municipalities --no-truncate
-```
-
-### Sync Foreign States
-
-```bash
-# Sync from ANPR and update translations
-php artisan codice-fiscale:sync-foreign-states
-
-# Skip ANPR sync
-php artisan codice-fiscale:sync-foreign-states --no-anpr
-
-# Skip translations
-php artisan codice-fiscale:sync-foreign-states --no-translations
-
-# Don't truncate existing data
-php artisan codice-fiscale:sync-foreign-states --no-truncate
+# Sync only muncipalities
+php artisan codice-fiscale:sync-geo-locations --type=comune
 ```
 
 ## Documentation
@@ -402,7 +377,6 @@ CodiceFiscale::make('codice_fiscale')
 ## Credits
 
 - **Provincia Autonoma di Bolzano**: German translation data (Pronotel)
-- **ANPR (Anagrafe Nazionale Popolazione Residente)**: Official Italian data source (optionally updatable)
 
 ## License
 
