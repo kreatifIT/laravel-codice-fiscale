@@ -3,7 +3,7 @@
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/10.3/phpunit.xsd"
     backupGlobals="false"
-    bootstrap="vendor/autoload.php"
+    bootstrap="/var/www/html/vendor/autoload.php"
     colors="true"
     processIsolation="false"
     stopOnFailure="false"
@@ -16,7 +16,7 @@
     backupStaticProperties="false"
 >
     <testsuites>
-        <testsuite name="VendorName Test Suite">
+        <testsuite name="Kreatif Codice Fiscale Test Suite">
             <directory>tests</directory>
         </testsuite>
     </testsuites>

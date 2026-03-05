@@ -35,7 +35,7 @@ class CalculateCodiceFiscale
 
     public function __construct(?FindBelfioreCode $belfioreCodeFinder = null)
     {
-        $this->belfioreCodeFinder = $belfioreCodeFinder ?? new FindBelfioreCode();
+        $this->belfioreCodeFinder = $belfioreCodeFinder ?? app(FindBelfioreCode::class);
     }
 
     public static function calculate(array $data): ?string

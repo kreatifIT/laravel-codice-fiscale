@@ -180,10 +180,11 @@ class GeoLocation extends Model
         string $search,
         ?string $type = null,
         int $limit = 50,
-        ?string $locale = null
+        ?string $locale = null,
+        ?array $textSearchableColumns = null,
     ): \Illuminate\Database\Eloquent\Collection
     {
-        $textSearchableColumns = [
+        $textSearchableColumns = $textSearchableColumns ?? [
             'denominazione',
             'denominazione_de',
             'denominazione_en',

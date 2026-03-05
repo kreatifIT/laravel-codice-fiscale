@@ -2,19 +2,18 @@
 
 namespace Kreatif\CodiceFiscale\Filament\Forms\Traits;
 
-
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Group;
-use Kreatif\CodiceFiscale\Models\GeoLocation;
 
 trait HasGeoLocationFilamentFields
 {
+    use HasCodiceFiscaleLabels;
 
     /**
      * @return class-string<\Kreatif\CodiceFiscale\Models\GeoLocation>
      */
-    protected static function getCodiceFiscaleGeoLocationModel(): string
+    protected static function getGeoLocationModel(): string
     {
         return config(
             'codice-fiscale.geo_locations_model',
@@ -22,134 +21,243 @@ trait HasGeoLocationFilamentFields
         );
     }
 
-    public function getFilamentDropdownForCountry(string $name, bool $isRequired = true, ?string $locale = null): Select
-    {
-        $locale = $locale ?? app()->getLocale();
-        $select = Select::make($name)
-            ->searchable()
-            ->live()
-            ->getSearchResultsUsing(function (string $search) use ($locale) {
-                return $this->getGeoLocationSearchResults(
-                    $search,
-                    config('codice-fiscale.item_types.stato'),
-                    50,
-                    $locale
-                );
+    /**
+     * Search geo-locations and return [$value => $label] pairs.
+     *
+     * @param  string  $valueColumn  'codice_catastale' (default) or 'id'
+     */
+    protected static function geoLocationSearchResults(
+        string $search,
+        string $itemType,
+        int $limit = 50,
+        string $valueColumn = 'codice_catastale',
+    ): array {
+        $locale = app()->getLocale();
+        $labelColumn = in_array($locale, ['de', 'en']) ? 'denominazione_' . $locale : 'denominazione';
+
+        return static::getGeoLocationModel()::searchOptions($search, $itemType, $limit)
+            ->mapWithKeys(function ($location) use ($valueColumn, $labelColumn) {
+                $label = $location->getAttributeValue($labelColumn)
+                    ?? $location->getAttributeValue('denominazione')
+                    ?? $location->getAttributeValue('denominazione_de')
+                    ?? $location->getAttributeValue('denominazione_en')
+                    ?? (string) $location->getAttributeValue($valueColumn);
+
+                return [$location->getAttributeValue($valueColumn) => $label];
             })
-            ->getOptionLabelUsing(function ($value) use ($locale) {
-                // if ($value === '*') {
-                //     return __('labels.Italy');
-                // }
-                return $this->getGeoLocationOptionLabelForFilament($value, config('codice-fiscale.item_types.stato'), $locale);
-            })
-            ->label(__('labels.'.$name));
-
-        if ($isRequired) {
-            $select->required();
-        }
-
-        return $select;
-    }
-
-    public static function getGeoLocationSearchResults(string $search, string $itemType, int $resultLimit = 50, ?string $locale = null): array
-    {
-        $model = self::getCodiceFiscaleGeoLocationModel();
-        $locale = $locale ?? app()->getLocale();
-        $labelColumn = 'denominazione';
-        if (in_array($locale, ['de', 'en'])) {
-            $labelColumn = 'denominazione_'.$locale;
-        }
-        $data = $model::searchOptions(
-            $search,
-            $itemType,
-            $resultLimit
-        )
-            ->pluck($labelColumn, 'codice_catastale')
             ->toArray();
-        // where key is null, Filament gives error, so we replace the key with value
-        foreach ($data as $key => $value) {
-            if ($value == null && $key != null) {
-                $result = GeoLocation::query()
-                    ->where('codice_catastale', $key)->first();
-                if ($result) {
-                    $value = $result->getAttributeValue('denominazione') ??
-                        $result->getAttributeValue('denominazione_de') ??
-                        $result->getAttributeValue('denominazione_en') ??
-                        $result->getAttributeValue('altra_denominazione') ??
-                        $key;
-                    $data[$key] = $value;
-                }
-            }
-        }
-//        Log::warning('GeoLocationSearchResults: '.$search.' - '.$itemType.' - '.$resultLimit.' - '.$locale.' - '.json_encode($data));
-        return $data;
-    }
-
-    public static function getGeoLocationOptionLabelForFilament(string $value, ?string $itemType = null, ?string $locale = null): string
-    {
-        $model = self::getCodiceFiscaleGeoLocationModel();
-        $locale = $locale ?? app()->getLocale();
-        $labelColumn = 'denominazione';
-        if (in_array($locale, ['de', 'en'])) {
-            $labelColumn = 'denominazione_'.$locale;
-        }
-
-        $query = $model::query()
-            ->where('codice_catastale', $value);
-
-        if ($itemType) {
-            $query->where('item_type', $itemType);
-        }
-
-        return $query->value($labelColumn) ?? $value;
     }
 
     /**
-     * @param  string  $name  Field name
-     * @param  string|null  $countryFieldDependOn  Name of the country field to depend on:
-     *                                          - Italy ('*')  => use select of comuni
-     *                                          - Other        => use free text input
+     * Resolve the display label for a stored geo-location value.
+     *
+     * @param  string  $valueColumn  'codice_catastale' (default) or 'id'
      */
-    public function getFilamentDropdownForMunicipality(
+    protected static function geoLocationOptionLabel(
+        mixed $value,
+        string $itemType,
+        string $valueColumn = 'codice_catastale',
+        string $fallbackColumn = 'denominazione',
+    ): string {
+        $locale = app()->getLocale();
+        $labelColumn = in_array($locale, ['de', 'en']) ? 'denominazione_' . $locale : $fallbackColumn;
+
+        $record = static::getGeoLocationModel()::query()
+            ->where($valueColumn, $value)
+            ->where('item_type', $itemType)
+            ->first();
+
+        if (! $record) {
+            return (string) $value;
+        }
+
+        return $record->getAttributeValue($labelColumn)
+            ?? $record->getAttributeValue($fallbackColumn)
+            ?? (string) $value;
+    }
+
+    /**
+     * Searchable country/state Select backed by geo_locations.
+     *
+     * @param  string  $valueColumn  'codice_catastale' (default) or 'id'
+     */
+    public static function getFilamentDropdownForCountry(
         string $name,
-        ?string $countryFieldDependOn = null,
-        bool $isRequired = true,
-        bool $live = false,
-        ?string $helperLabel = null,
-        ?string $locale = null
+        string $valueColumn = 'codice_catastale',
+        int $searchLimit = 50,
+    ): Select {
+        return Select::make($name)
+            ->label(static::getCountryOfBirthLabel())
+            ->searchable()
+            ->live()
+            ->getSearchResultsUsing(fn (string $search) => static::geoLocationSearchResults(
+                $search,
+                config('codice-fiscale.item_types.stato'),
+                $searchLimit,
+                $valueColumn,
+            ))
+            ->getOptionLabelUsing(fn ($value) => static::geoLocationOptionLabel(
+                $value,
+                config('codice-fiscale.item_types.stato'),
+                $valueColumn,
+            ));
+    }
+
+    /**
+     * Dynamic place-of-birth field.
+     * - Municipality Select when country value matches $italyValue
+     * - Free TextInput for any other country
+     *
+     * @param  string|int  $italyValue       '*' when valueColumn='codice_catastale', or Italy's numeric ID
+     * @param  string      $valueColumn      'codice_catastale' (default) or 'id'
+     * @param  \Closure|null $modify         Receives the built field via named injections:
+     *                                       $field, $countryValue, $italyValue, $isItaly
+     *                                       Return a component to replace it, or void to mutate in place.
+     */
+    public static function getFilamentDropdownForMunicipality(
+        string $name,
+        ?string $countryField = null,
+        string|int $italyValue = '*',
+        ?string $label = null,
+        string $valueColumn = 'codice_catastale',
+        int $searchLimit = 50,
+        ?string $freeTextInputName = null,
+        ?\Closure $modify = null,
     ): Group {
-        $locale = $locale ?? app()->getLocale();
-        return Group::make(function ($get) use ($name, $countryFieldDependOn, $isRequired, $helperLabel, $live, $locale) {
-            // Default: Italian municipality select
-            $field = Select::make($name)
-                ->searchable()
-                ->getSearchResultsUsing(function (string $search) use ($locale) {
-                   return $this->getGeoLocationSearchResults($search, config('codice-fiscale.item_types.comune'), 50, $locale);
-                })
-                ->getOptionLabelUsing(function ($value) use ($locale) {
-                    return $this->getGeoLocationOptionLabelForFilament($value, config('codice-fiscale.item_types.comune'), $locale);
-                });
+        $freeTextInputName = $freeTextInputName ?? $name;
 
-            if ($countryFieldDependOn) {
-                $countryValue = $get($countryFieldDependOn);
-                // If country is NOT Italy ('*'), use free-text input for municipality
-                if ($countryValue && $countryValue !== '*') {
-                    $field = TextInput::make($name)->maxLength(150);
-                }
-            }
-            if ($live) {
-                $field->live();
-            }
-            if ($helperLabel) {
-                $field->helperText($helperLabel);
-            }
-
-            $field
-                ->label(__('labels.'.$name))
-                ->required($isRequired);
-
-            return [$field];
+        return Group::make(function ($get) use ($name, $countryField, $italyValue, $label, $valueColumn, $searchLimit, $freeTextInputName, $modify) {
+            return static::resolveMunicipalityField($get, $name, $countryField, $italyValue, $label, $valueColumn, $searchLimit, $freeTextInputName, $modify);
         });
     }
 
+    /**
+     * Resolve the concrete field(s) for the municipality Group.
+     * Extracted for testability — call this directly in tests instead of going through the Filament schema lifecycle.
+     *
+     * @param  callable    $get              Filament Get helper (or any callable in tests)
+     * @param  string|int  $italyValue       '*' for codice_catastale, or Italy's actual value for other columns
+     * @param  \Closure|null $modify         Receives named injections: field, countryValue, italyValue, isItaly.
+     *                                       Return a component to replace the default, or void to mutate in place.
+     * @return array<int, \Filament\Forms\Components\Field>
+     */
+    public static function resolveMunicipalityField(
+        callable $get,
+        string $name,
+        ?string $countryField = null,
+        string|int $italyValue = '*',
+        ?string $label = null,
+        string $valueColumn = 'codice_catastale',
+        int $searchLimit = 50,
+        string $freeTextInputName = '',
+        ?\Closure $modify = null,
+    ): array {
+        $freeTextInputName = $freeTextInputName ?: $name;
+        $resolvedLabel = $label ?? static::getPlaceOfBirthLabel();
+        $countryValue = null;
+
+        if ($countryField) {
+            $countryValue = $get($countryField);
+
+            // When using a non-catastale value column and the caller left $italyValue as '*',
+            // we cannot rely on '*' — resolve Italy's actual stored value from the database.
+            if ($valueColumn !== 'codice_catastale' && $italyValue === '*') {
+                $italyRecord = static::getGeoLocationModel()::query()
+                    ->where('item_type', config('codice-fiscale.item_types.stato'))
+                    ->where(fn ($q) => $q
+                        ->where('denominazione', 'Italia')
+                        ->orWhere('denominazione_en', 'Italy')
+                        ->orWhere('denominazione_de', 'Italien')
+                    )
+                    ->first();
+
+                if ($italyRecord) {
+                    $italyValue = $italyRecord->getAttributeValue($valueColumn);
+                }
+            }
+
+            if ($countryValue && (string) $countryValue !== (string) $italyValue) {
+                $field = TextInput::make($freeTextInputName)
+                    ->label($resolvedLabel)
+                    ->maxLength(150);
+
+                return [static::applyModify($field, $modify, $countryValue, $italyValue, false)];
+            }
+        }
+
+        $field = Select::make($name)
+            ->label($resolvedLabel)
+            ->searchable()
+            ->getSearchResultsUsing(fn (string $search) => static::geoLocationSearchResults(
+                $search,
+                config('codice-fiscale.item_types.comune'),
+                $searchLimit,
+                $valueColumn,
+            ))
+            ->getOptionLabelUsing(fn ($value) => static::geoLocationOptionLabel(
+                $value,
+                config('codice-fiscale.item_types.comune'),
+                $valueColumn,
+            ));
+
+        return [static::applyModify($field, $modify, $countryValue, $italyValue, $countryValue !== null)];
+    }
+
+    /**
+     * Apply the $modify closure to a field.
+     * Supports both mutation (void return) and replacement (return a new component).
+     *
+     * @param  \Filament\Forms\Components\Field  $field
+     * @param  mixed  $countryValue  The current country field value (null if no country dependency)
+     * @param  string|int  $italyValue  The resolved Italy value
+     * @param  bool  $isItaly  Whether the current country is Italy
+     * @return \Filament\Forms\Components\Field
+     */
+    protected static function applyModify(
+        mixed $field,
+        ?\Closure $modify,
+        mixed $countryValue,
+        string|int $italyValue,
+        bool $isItaly,
+    ): mixed {
+        if (! $modify) {
+            return $field;
+        }
+
+        $result = $field->evaluate($modify, [
+            'field'        => $field,
+            'countryValue' => $countryValue,
+            'italyValue'   => $italyValue,
+            'isItaly'      => $isItaly,
+        ]);
+
+        // If the closure returned a replacement component, use it.
+        // Otherwise, mutations on $field (object reference) are already applied.
+        return ($result instanceof \Filament\Forms\Components\Field) ? $result : $field;
+    }
+
+    // -------------------------------------------------------------------------
+    // Backward-compatibility aliases
+    // -------------------------------------------------------------------------
+
+    /** @deprecated Use getGeoLocationModel() */
+    protected static function getCodiceFiscaleGeoLocationModel(): string
+    {
+        return static::getGeoLocationModel();
+    }
+
+    /** @deprecated Use geoLocationSearchResults() */
+    public static function getGeoLocationSearchResults(string $search, string $itemType, int $resultLimit = 50, ?string $locale = null): array
+    {
+        return static::geoLocationSearchResults($search, $itemType, $resultLimit);
+    }
+
+    /** @deprecated Use geoLocationOptionLabel() */
+    public static function getGeoLocationOptionLabelForFilament(string $value, ?string $itemType = null, ?string $locale = null): string
+    {
+        return static::geoLocationOptionLabel(
+            $value,
+            $itemType ?? config('codice-fiscale.item_types.stato'),
+        );
+    }
 }
