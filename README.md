@@ -1,6 +1,6 @@
 # Laravel Codice Fiscale Package
 
-A comprehensive Laravel package for Italian Codice Fiscale (Tax Code) with Filament PHP v4 integration, validation, and multilingual geo-location support.
+A comprehensive Laravel package for Italian Codice Fiscale (Tax Code) with Filament PHP v5 integration, validation, and multilingual geo-location support.
 
 ## Features
 
@@ -11,14 +11,14 @@ A comprehensive Laravel package for Italian Codice Fiscale (Tax Code) with Filam
 - ✅ **Console Commands**: Easy data synchronization from official ANPR sources
 - ✅ **Alto Adige / Südtirol Support**: Special handling for bilingual region
 - ✅ **Caching**: Built-in caching for Belfiore code lookups
-- ✅ **Filament v4 Field Component**: Full-featured custom field with generator and validator
+- ✅ **Filament v5 Field Component**: Full-featured custom field with generator and validator
 - ✅ **Filament Form Fields Trait**: Ready-to-use trait with all CF fields (firstname, lastname, DOB, gender, country, place, CF)
 
 ## Requirements
 
 - PHP 8.2 | 8.3 | 8.4+
 - Laravel 11.x | 12.x
-- Filament 4.x
+- Filament 5.x (for previous version v1.0.0)
 - Database: MySQL, PostgreSQL, MariaDB, or SQLite
 
 ## Installation
