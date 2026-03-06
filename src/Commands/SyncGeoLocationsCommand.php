@@ -200,18 +200,35 @@ class SyncGeoLocationsCommand extends Command
                 continue;
             }
             if ($sourceType == 'file') {
-                $guessRecordItemType = strlen($r['sigla_provincia']) == 2
+                $siglaProvincia = $r['sigla_provincia'] ?? '';
+                $guessRecordItemType = strlen($siglaProvincia) == 2
                     ? config('codice-fiscale.item_types.comune', 'comune')
                     : config('codice-fiscale.item_types.stato', 'stato');
                 if ($type !== $guessRecordItemType) {
                     continue;
                 }
-
             }
 
-            if (!isset($r['DENOMINAZIONE']) || !isset($r['CODAT']) || !isset($r['NASCITA']) || $r['NASCITA'] == 'N') {
-                if (!isset($r['descr_i']) || !isset($r['codice']))
+            if (!isset($r['DENOMINAZIONE']) && !isset($r['denominazione'])) {
+                if (!isset($r['descr_i']) && !isset($r['codice'])) {
                     continue;
+                }
+            }
+
+            if (!isset($r['CODAT']) && !isset($r['codat'])) {
+                if (!isset($r['descr_i']) && !isset($r['codice'])) {
+                    continue;
+                }
+            }
+
+            if (!isset($r['NASCITA']) && !isset($r['nascita'])) {
+                if (!isset($r['descr_i']) && !isset($r['codice'])) {
+                    continue;
+                }
+            }
+
+            if ((isset($r['NASCITA']) && $r['NASCITA'] == 'N') || (isset($r['nascita']) && $r['nascita'] == 'N')) {
+                continue;
             }
 
             $mapped = $this->mapRecord($r, $mapping, $defaults, $type);
