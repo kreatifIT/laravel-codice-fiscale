@@ -139,6 +139,11 @@ trait HasGeoLocationFilamentFields
 
             if ($countryFieldDependOn) {
                 $countryValue = $get($countryFieldDependOn);
+                // If the country field stores an integer ID, resolve it to codice_catastale
+                if (is_numeric($countryValue)) {
+                    $model = self::getCodiceFiscaleGeoLocationModel();
+                    $countryValue = $model::find($countryValue)?->codice_catastale ?? $countryValue;
+                }
                 // If country is NOT Italy ('*'), use free-text input for municipality
                 if ($countryValue && $countryValue !== '*') {
                     $field = TextInput::make($freeTextInputName)->maxLength(150);

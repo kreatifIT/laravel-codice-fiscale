@@ -555,4 +555,256 @@ class DualColumnIntegrationTest extends TestCase
         );
         $this->assertFalse($foreignFields[0]->isRequired());
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // H — valueColumn='id' passed directly to getFilamentDropdownForMunicipality
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Extracts the stored search closure from a Select and calls it with a search term.
+     * This lets us verify that valueColumn is actually wired into the Select's search.
+     */
+    private function callSelectSearchClosure(Select $select, string $search): array
+    {
+        $ref = new \ReflectionProperty($select, 'getSearchResultsUsing');
+        $ref->setAccessible(true);
+        $closure = $ref->getValue($select);
+
+        return $select->evaluate($closure, ['search' => $search]);
+    }
+
+    public function test_select_search_keyed_by_id_when_value_column_is_id(): void
+    {
+        $fields = $this->resolveGroupFields(
+            $this->trait->getFilamentDropdownForMunicipality(
+                'birth_municipality_id',
+                'cob',
+                freeTextInputName: 'birth_municipality_name',
+                valueColumn: 'id',
+            ),
+            fn ($f) => '*', // Italy → Select
+        );
+
+        $select = $fields[0];
+        $this->assertInstanceOf(Select::class, $select);
+
+        $results = $this->callSelectSearchClosure($select, 'Roma');
+
+        $this->assertArrayHasKey($this->roma->id, $results);
+        $this->assertNotEmpty($results[$this->roma->id]);     // has a label (locale-dependent)
+        $this->assertArrayNotHasKey('H501', $results);        // NOT keyed by codice_catastale
+    }
+
+    public function test_select_search_keyed_by_codice_catastale_by_default(): void
+    {
+        // Control: without valueColumn, search results use codice_catastale
+        $fields = $this->resolveGroupFields(
+            $this->trait->getFilamentDropdownForMunicipality(
+                'birth_municipality_id',
+                'cob',
+                freeTextInputName: 'birth_municipality_name',
+            ),
+            fn ($f) => '*',
+        );
+
+        $select = $fields[0];
+        $results = $this->callSelectSearchClosure($select, 'Roma');
+
+        $this->assertArrayHasKey('H501', $results);
+        $this->assertArrayNotHasKey($this->roma->id, $results);
+    }
+
+    public function test_cob_option_search_keyed_by_id_and_value(): void
+    {
+        // Control: without valueColumn, search results use codice_catastale
+        $fields = $this->resolveGroupFields(
+            $this->trait->getFilamentDropdownForMunicipality(
+                'birth_municipality_id',
+                'cob',
+                freeTextInputName: 'birth_municipality_name',
+                valueColumn: 'id',
+            ),
+            fn ($f) => '4',
+        );
+        $textSearchInput = $fields[0];
+        $this->assertInstanceOf(TextInput::class, $textSearchInput);
+        $this->assertEquals('birth_municipality_name', $textSearchInput->getName());
+    }
+
+    public function test_select_search_with_id_column_finds_multiple_comuni(): void
+    {
+        $fields = $this->resolveGroupFields(
+            $this->trait->getFilamentDropdownForMunicipality(
+                'birth_municipality_id',
+                'cob',
+                freeTextInputName: 'birth_municipality_name',
+                valueColumn: 'id',
+            ),
+            fn ($f) => '*',
+        );
+
+        $results = $this->callSelectSearchClosure($fields[0], 'Rom');
+
+        $this->assertArrayHasKey($this->roma->id,    $results); // Roma
+        $this->assertArrayHasKey($this->romagna->id, $results); // Romagna Longa
+    }
+
+    public function test_field_switching_works_correctly_with_id_value_column(): void
+    {
+        $group = $this->trait->getFilamentDropdownForMunicipality(
+            'birth_municipality_id',
+            'cob',
+            freeTextInputName: 'birth_municipality_name',
+            valueColumn: 'id',
+        );
+
+        // Italy → Select, name = 'birth_municipality_id'
+        $italy = $this->resolveGroupFields($group, fn ($f) => '*');
+        $this->assertInstanceOf(Select::class, $italy[0]);
+        $this->assertEquals('birth_municipality_id', $italy[0]->getName());
+
+        // Foreign → TextInput, name = 'birth_municipality_name'
+        $foreign = $this->resolveGroupFields($group, fn ($f) => 'Z336');
+        $this->assertInstanceOf(TextInput::class, $foreign[0]);
+        $this->assertEquals('birth_municipality_name', $foreign[0]->getName());
+    }
+
+    public function test_text_input_unaffected_by_value_column(): void
+    {
+        // valueColumn is irrelevant for the TextInput (no search/option logic there)
+        // but freeTextInputName must still be used as the field name
+        $fields = $this->resolveGroupFields(
+            $this->trait->getFilamentDropdownForMunicipality(
+                'birth_municipality_id',
+                'cob',
+                freeTextInputName: 'birth_municipality_name',
+                valueColumn: 'id',
+            ),
+            fn ($f) => $this->germany->codice_catastale, // 'Z336'
+        );
+
+        $this->assertInstanceOf(TextInput::class, $fields[0]);
+        $this->assertEquals('birth_municipality_name', $fields[0]->getName());
+        $this->assertEquals(150, $fields[0]->getMaxLength());
+    }
+
+    public function test_select_search_with_id_column_respects_search_locale(): void
+    {
+        $fields = $this->resolveGroupFields(
+            $this->trait->getFilamentDropdownForMunicipality(
+                'birth_municipality_id',
+                'cob',
+                freeTextInputName: 'birth_municipality_name',
+                valueColumn: 'id',
+            ),
+            fn ($f) => '*',
+        );
+
+        // The locale defaults to app()->getLocale() inside the closure.
+        // We seed Roma with denominazione_en='Rome' so searching in 'en' locale should give 'Rome'.
+        app()->setLocale('en');
+
+        $results = $this->callSelectSearchClosure($fields[0], 'Roma');
+
+        $this->assertArrayHasKey($this->roma->id, $results);
+        $this->assertEquals('Rome', $results[$this->roma->id]);
+
+        app()->setLocale('it'); // restore
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // I — Country + Municipality combined end-to-end
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Full flow with valueColumn='codice_catastale' (default):
+     *   - Country select stores codice_catastale ('*' / 'Z336')
+     *   - Municipality Select (Italy) keyed by codice_catastale
+     *   - Municipality TextInput (foreign) uses freeTextInputName
+     */
+    public function test_combined_country_and_municipality_with_codice_catastale_value_column(): void
+    {
+        // ── Country select ────────────────────────────────────────────────────
+        $countrySelect = $this->trait->getFilamentDropdownForCountry('cob', locale: 'it');
+
+        $italyCountry = $this->callSelectSearchClosure($countrySelect, 'Italia');
+        $this->assertArrayHasKey('*', $italyCountry, 'Italy must be keyed by codice_catastale "*"');
+
+        $germanyCountry = $this->callSelectSearchClosure($countrySelect, 'Germania');
+        $this->assertArrayHasKey('Z336', $germanyCountry, 'Germany must be keyed by codice_catastale "Z336"');
+
+        // ── Municipality group ─────────────────────────────────────────────────
+        $muniGroup = $this->trait->getFilamentDropdownForMunicipality(
+            'pob',
+            'cob',
+            freeTextInputName: 'pob_text',
+            locale: 'it',
+            // valueColumn defaults to 'codice_catastale'
+        );
+
+        // Italy ('*') → Select with name 'pob'
+        $italyFields = $this->resolveGroupFields($muniGroup, fn ($f) => '*');
+        $this->assertInstanceOf(Select::class, $italyFields[0]);
+        $this->assertEquals('pob', $italyFields[0]->getName());
+
+        // Municipality search keyed by codice_catastale
+        $muniResults = $this->callSelectSearchClosure($italyFields[0], 'Roma');
+        $this->assertArrayHasKey('H501', $muniResults);              // keyed by codice_catastale
+        $this->assertArrayNotHasKey($this->roma->id, $muniResults);  // NOT keyed by id
+        $this->assertEquals('Roma', $muniResults['H501']);
+
+        // Germany ('Z336') → TextInput with freeTextInputName
+        $foreignFields = $this->resolveGroupFields($muniGroup, fn ($f) => 'Z336');
+        $this->assertInstanceOf(TextInput::class, $foreignFields[0]);
+        $this->assertEquals('pob_text', $foreignFields[0]->getName());
+        $this->assertEquals(150, $foreignFields[0]->getMaxLength());
+    }
+
+    /**
+     * Full flow with valueColumn='id':
+     *   - Country select still stores codice_catastale ('*' / 'Z336') — unchanged
+     *   - Municipality Select (Italy) keyed by geo_locations.id (integer FK)
+     *   - Municipality TextInput (foreign) uses freeTextInputName; valueColumn irrelevant
+     */
+    public function test_combined_country_and_municipality_with_id_value_column(): void
+    {
+        // ── Country select ─────────────────────────────────────────────────────
+        // Country always uses codice_catastale regardless of municipality's valueColumn
+        $countrySelect = $this->trait->getFilamentDropdownForCountry('cob', locale: 'it');
+
+        $italyCountry = $this->callSelectSearchClosure($countrySelect, 'Italia');
+        $this->assertArrayHasKey('*', $italyCountry);
+
+        $germanyCountry = $this->callSelectSearchClosure($countrySelect, 'Germania');
+        $this->assertArrayHasKey('Z336', $germanyCountry);
+
+        // ── Municipality group with valueColumn='id' ───────────────────────────
+        $muniGroup = $this->trait->getFilamentDropdownForMunicipality(
+            'birth_municipality_id',
+            'cob',
+            freeTextInputName: 'birth_municipality_name',
+            valueColumn: 'id',
+        );
+
+        // Italy ('*') → Select with name 'birth_municipality_id'
+        $italyFields = $this->resolveGroupFields($muniGroup, fn ($f) => '*');
+        $this->assertInstanceOf(Select::class, $italyFields[0]);
+        $this->assertEquals('birth_municipality_id', $italyFields[0]->getName());
+
+        // Municipality search keyed by integer ID (FK to geo_locations.id)
+        $muniResults = $this->callSelectSearchClosure($italyFields[0], 'Roma');
+        $this->assertArrayHasKey($this->roma->id, $muniResults);     // keyed by integer id
+        $this->assertArrayNotHasKey('H501', $muniResults);           // NOT keyed by codice_catastale
+        $this->assertNotEmpty($muniResults[$this->roma->id]);         // has a label
+
+        // The stored id resolves back to the correct record (FK integrity)
+        $resolved = GeoLocation::find($this->roma->id);
+        $this->assertEquals('Roma', $resolved->denominazione);
+
+        // Germany ('Z336') → TextInput; valueColumn plays no role here
+        $foreignFields = $this->resolveGroupFields($muniGroup, fn ($f) => 'Z336');
+        $this->assertInstanceOf(TextInput::class, $foreignFields[0]);
+        $this->assertEquals('birth_municipality_name', $foreignFields[0]->getName());
+        $this->assertEquals(150, $foreignFields[0]->getMaxLength());
+    }
 }
