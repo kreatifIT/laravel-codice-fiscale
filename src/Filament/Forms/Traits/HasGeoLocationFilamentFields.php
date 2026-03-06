@@ -51,7 +51,7 @@ trait HasGeoLocationFilamentFields
         return $select;
     }
 
-    public static function getGeoLocationSearchResults(string $search, string $itemType, int $resultLimit = 50, ?string $locale = null): array
+    public static function getGeoLocationSearchResults(string $search, string $itemType, int $resultLimit = 50, ?string $locale = null, ?string $valueColumn = 'codice_catastale'): array
     {
         $model = self::getCodiceFiscaleGeoLocationModel();
         $locale = $locale ?? app()->getLocale();
@@ -64,13 +64,16 @@ trait HasGeoLocationFilamentFields
             $itemType,
             $resultLimit
         )
-            ->pluck($labelColumn, 'codice_catastale')
+            ->pluck($labelColumn, $valueColumn)
             ->toArray();
-        // where key is null, Filament gives error, so we replace the key with value
+        // where key's value is null, Filament gives error, so we add a workaround to set the value
+        // basically you pluck the label column 'denominizaione' or 'denominazione_de' or 'denominazione_en' as value,
+        // but if the value is null then you pluck the key column 'codice_catastale' as value,
+        // so you have always a value for the option label
         foreach ($data as $key => $value) {
             if ($value == null && $key != null) {
                 $result = GeoLocation::query()
-                    ->where('codice_catastale', $key)->first();
+                    ->where($valueColumn, $key)->first();
                 if ($result) {
                     $value = $result->getAttributeValue('denominazione') ??
                         $result->getAttributeValue('denominazione_de') ??
@@ -116,25 +119,29 @@ trait HasGeoLocationFilamentFields
         bool $isRequired = true,
         bool $live = false,
         ?string $helperLabel = null,
-        ?string $locale = null
+        ?string $locale = null,
+        ?string $freeTextInputName = null,
+        ?\Closure $closure = null,
+        ?string $valueColumn = 'codice_catastale',
     ): Group {
         $locale = $locale ?? app()->getLocale();
-        return Group::make(function ($get) use ($name, $countryFieldDependOn, $isRequired, $helperLabel, $live, $locale) {
+        $freeTextInputName = $freeTextInputName ?? $name;
+        return Group::make(function ($get) use ($name, $countryFieldDependOn, $isRequired, $helperLabel, $live, $locale, $freeTextInputName, $closure, $valueColumn) {
             // Default: Italian municipality select
             $field = Select::make($name)
                 ->searchable()
-                ->getSearchResultsUsing(function (string $search) use ($locale) {
-                   return $this->getGeoLocationSearchResults($search, config('codice-fiscale.item_types.comune'), 50, $locale);
+                ->getSearchResultsUsing(function (string $search) use ($locale, $valueColumn) {
+                   return $this->getGeoLocationSearchResults($search, config('codice-fiscale.item_types.comune'), 50, $locale, $valueColumn);
                 })
-                ->getOptionLabelUsing(function ($value) use ($locale) {
-                    return $this->getGeoLocationOptionLabelForFilament($value, config('codice-fiscale.item_types.comune'), $locale);
+                ->getOptionLabelUsing(function ($value) use ($locale, $valueColumn) {
+                    return $this->getGeoLocationOptionLabelForFilament($value, config('codice-fiscale.item_types.comune'), $locale, $valueColumn);
                 });
 
             if ($countryFieldDependOn) {
                 $countryValue = $get($countryFieldDependOn);
                 // If country is NOT Italy ('*'), use free-text input for municipality
                 if ($countryValue && $countryValue !== '*') {
-                    $field = TextInput::make($name)->maxLength(150);
+                    $field = TextInput::make($freeTextInputName)->maxLength(150);
                 }
             }
             if ($live) {
@@ -147,6 +154,17 @@ trait HasGeoLocationFilamentFields
             $field
                 ->label(__('labels.'.$name))
                 ->required($isRequired);
+            if ($closure) {
+                $field->evaluate($closure, [
+                        'countryFieldDependOn' => $countryFieldDependOn,
+                        'live' => $live,
+                        'helperLabel' => $helperLabel,
+                        'locale' => $locale,
+                        'freeTextInputName' => $freeTextInputName,
+                        'countryValue' => $countryValue ?? null,
+
+                ]);
+            }
 
             return [$field];
         });
