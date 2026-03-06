@@ -213,7 +213,7 @@ This single line gives you:
 - ✅ Country of Birth (searchable, live updates)
 - ✅ Place of Birth (dynamic: Select for Italy, TextInput for other countries)
 - ✅ Codice Fiscale field with strict validation
-- ✅ Multilingual labels (IT, EN, DE)
+- ✅ Multilingual labels (IT, EN, DE) for filamentphp fields
 
 #### With Generator & Validator
 
@@ -265,20 +265,6 @@ self::getCodiceFiscaleField(),
 
 All fields support label customization:
 
-```php
-// Use package labels (default)
-self::getFirstnameField()
-
-// Custom label
-self::getFirstnameField(label: 'Your First Name')
-
-// No label
-self::getFirstnameField(label: false)
-
-// Use your own translation key
-self::getFirstnameField(label: __('my-app.firstname'))
-```
-
 Available label getter methods:
 ```php
 self::getFirstnameLabel()       // Returns translated label
@@ -290,14 +276,14 @@ self::getPlaceOfBirthLabel()
 self::getCodiceFiscaleLabel()
 ```
 
-
+Basic example of full user form fields
 ```
                 self::getfirstNameField('firstname'),
                 self::getLastNameField('lastname'),
                 self::getDOBField('dob'),
                 self::getGenderField('gender'),
                 self::getCountryOfBirthField('cob'),
-                self::getPlaceOfBirthField('pob', true, 'cob'),
+                self::getPlaceOfBirthField('pob', countryField:'cob'),
                 self::getCodiceFiscaleField()
 //                    ->strict([ // in case the name of the fields are changed, and activate validation of CF, you  need to specify the name of the fields
 //                        'firstname' => 'first_name',
